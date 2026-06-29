@@ -53,12 +53,12 @@ DISCOUNT_STORE: dict[str, bool] = {"WELCOME50": False, "SUMMER20": False}
 
 def redeem_discount(code: str, user_id: str) -> str:
     """Agent Tool: Redeem a single-use discount code for a user."""
+    if not user_id or user_id.startswith("guest_"):
+        return "Error: Registered user account required to redeem discounts."
     if code not in DISCOUNT_STORE:
         return "Error: Invalid discount code."
     if DISCOUNT_STORE[code]:
         return "Error: Discount code has already been redeemed."
-    if not user_id or user_id.startswith("guest_"):
-        return "Error: Registered user account required to redeem discounts."
 
     DISCOUNT_STORE[code] = True
     return f"Success: Discount code {code} redeemed successfully for user {user_id}."
