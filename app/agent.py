@@ -51,17 +51,34 @@ model = Gemini(model="gemini-3.1-flash-lite", api_key=model_api_key)
 DISCOUNT_STORE: dict[str, bool] = {"WELCOME50": False, "SUMMER20": False}
 
 
+class RedeemDiscountInput(BaseModel):
+    code: str = Field(..., min_length=1)
+    user_id: str
+
+    @field_validator("user_id")
+    @classmethod
+    def validate_user_id(cls, v: str) -> str:
+        if not v or v.startswith("guest_"):
+            raise ValueError("Registered user account required to redeem discounts.")
+        return v
+
+
 def redeem_discount(code: str, user_id: str) -> str:
     """Agent Tool: Redeem a single-use discount code for a user."""
-    if not user_id or user_id.startswith("guest_"):
+    try:
+        validated = RedeemDiscountInput(code=code, user_id=user_id)
+    except Exception:
         return "Error: Registered user account required to redeem discounts."
-    if code not in DISCOUNT_STORE:
+
+    if validated.code not in DISCOUNT_STORE:
         return "Error: Invalid discount code."
-    if DISCOUNT_STORE[code]:
+    if DISCOUNT_STORE[validated.code]:
         return "Error: Discount code has already been redeemed."
 
-    DISCOUNT_STORE[code] = True
-    return f"Success: Discount code {code} redeemed successfully for user {user_id}."
+    DISCOUNT_STORE[validated.code] = True
+    return f"Success: Discount code {validated.code} redeemed successfully for user {validated.user_id}."
+
+
 
 
 logger = logging.getLogger(__name__)
