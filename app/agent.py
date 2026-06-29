@@ -33,8 +33,11 @@ class Gemini(ADKGemini):
     @property
     def api_client(self) -> Client:
         if self.api_key:
-            return Client(api_key=self.api_key)
+            if not hasattr(self, "_cached_api_client") or self._cached_api_client is None:
+                self._cached_api_client = Client(api_key=self.api_key)
+            return self._cached_api_client
         return super().api_client
+
 
 
 import os
