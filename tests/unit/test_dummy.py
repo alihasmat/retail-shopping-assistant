@@ -20,6 +20,8 @@ from app.agent import (
     LOYALTY_STORE,
     PROCESSED_TRANSACTIONS,
     award_loyalty_points,
+    CART_STORE,
+    process_cart_checkout,
 )
 
 
@@ -125,3 +127,123 @@ def test_award_loyalty_points_idempotency() -> None:
     assert "Error" in result2
     assert "already processed" in result2
     assert LOYALTY_STORE["user_123"] == 100
+
+
+def test_process_cart_checkout_success() -> None:
+    """Test successfully checking out a cart without a discount code."""
+    # Reset stores
+    CART_STORE["cart_2"] = {
+        "user_id": "user_456",
+        "items": [{"name": "Headphones", "price": 150.0}],
+        "total": 150.0,
+        "is_checked_out": False,
+    }
+
+    result = process_cart_checkout("cart_2", "user_456")
+    assert "Success" in result
+    assert "completed for cart cart_2" in result
+    assert "Final total: 150.0" in result
+    assert CART_STORE["cart_2"]["is_checked_out"] is True
+
+
+def test_process_cart_checkout_with_discount_success() -> None:
+    """Test successfully checking out a cart with a discount code."""
+    CART_STORE["cart_1"] = {
+        "user_id": "user_123",
+        "items": [{"name": "Laptop", "price": 900.0}, {"name": "Mouse", "price": 50.0}],
+        "total": 950.0,
+        "is_checked_out": False,
+    }
+    DISCOUNT_STORE["WELCOME50"] = False
+
+    result = process_cart_checkout("cart_1", "user_123", "WELCOME50")
+    assert "Success" in result
+    assert "Final total: 475.0" in result
+    assert CART_STORE["cart_1"]["is_checked_out"] is True
+    assert DISCOUNT_STORE["WELCOME50"] is True
+
+
+def test_process_cart_checkout_wrong_owner_fails() -> None:
+    """Test that checking out another user's cart is rejected."""
+    CART_STORE["cart_1"] = {
+        "user_id": "user_123",
+        "items": [{"name": "Laptop", "price": 900.0}, {"name": "Mouse", "price": 50.0}],
+        "total": 950.0,
+        "is_checked_out": False,
+    }
+
+    result = process_cart_checkout("cart_1", "user_456")
+    assert "Error" in result
+    assert "Access denied" in result
+    assert CART_STORE["cart_1"]["is_checked_out"] is False
+
+
+def test_process_cart_checkout_guest_discount_fails() -> None:
+    """Test that guest accounts are blocked from using discount codes during checkout."""
+    CART_STORE["cart_guest"] = {
+        "user_id": "guest_789",
+        "items": [{"name": "Book", "price": 20.0}],
+        "total": 20.0,
+        "is_checked_out": False,
+    }
+    DISCOUNT_STORE["WELCOME50"] = False
+
+    result = process_cart_checkout("cart_guest", "guest_789", "WELCOME50")
+    assert "Error" in result
+    assert "Registered account required to apply discounts" in result
+    assert CART_STORE["cart_guest"]["is_checked_out"] is False
+    assert DISCOUNT_STORE["WELCOME50"] is False
+
+
+def test_process_cart_checkout_already_checked_out_fails() -> None:
+    """Test that a cart cannot be checked out more than once."""
+    CART_STORE["cart_2"] = {
+        "user_id": "user_456",
+        "items": [{"name": "Headphones", "price": 150.0}],
+        "total": 150.0,
+        "is_checked_out": False,
+    }
+
+    # First checkout succeeds
+    result1 = process_cart_checkout("cart_2", "user_456")
+    assert "Success" in result1
+
+    # Second checkout fails
+    result2 = process_cart_checkout("cart_2", "user_456")
+    assert "Error" in result2
+    assert "already been checked out" in result2
+
+
+def test_process_cart_checkout_invalid_cart_fails() -> None:
+    """Test checkout fails for non-existent cart."""
+    result = process_cart_checkout("cart_non_existent", "user_123")
+    assert "Error" in result
+    assert "not found" in result
+
+
+def test_process_cart_checkout_double_discount_fails() -> None:
+    """Test that a discount code cannot be redeemed twice across multiple checkouts."""
+    CART_STORE["cart_1"] = {
+        "user_id": "user_123",
+        "items": [{"name": "Laptop", "price": 900.0}, {"name": "Mouse", "price": 50.0}],
+        "total": 950.0,
+        "is_checked_out": False,
+    }
+    CART_STORE["cart_2"] = {
+        "user_id": "user_456",
+        "items": [{"name": "Headphones", "price": 150.0}],
+        "total": 150.0,
+        "is_checked_out": False,
+    }
+    DISCOUNT_STORE["SUMMER20"] = False
+
+    # First user checkouts with SUMMER20 successfully
+    result1 = process_cart_checkout("cart_1", "user_123", "SUMMER20")
+    assert "Success" in result1
+    assert DISCOUNT_STORE["SUMMER20"] is True
+
+    # Second user tries to checkout with SUMMER20 and is rejected
+    result2 = process_cart_checkout("cart_2", "user_456", "SUMMER20")
+    assert "Error" in result2
+    assert "already been redeemed" in result2
+    assert CART_STORE["cart_2"]["is_checked_out"] is False

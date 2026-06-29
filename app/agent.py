@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import annotations
+from typing import Any
 
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.apps.app import App
@@ -107,12 +108,104 @@ def award_loyalty_points(user_id: str, points: int, transaction_id: str) -> str:
         return f"Success: Awarded {validated.points} points to user {validated.user_id}. New balance: {new_points}."
 
 
+# Simulated server-side shopping cart data store
+CART_STORE: dict[str, dict[str, Any]] = {
+    "cart_1": {
+        "user_id": "user_123",
+        "items": [{"name": "Laptop", "price": 900.0}, {"name": "Mouse", "price": 50.0}],
+        "total": 950.0,
+        "is_checked_out": False,
+    },
+    "cart_2": {
+        "user_id": "user_456",
+        "items": [{"name": "Headphones", "price": 150.0}],
+        "total": 150.0,
+        "is_checked_out": False,
+    },
+    "cart_guest": {
+        "user_id": "guest_789",
+        "items": [{"name": "Book", "price": 20.0}],
+        "total": 20.0,
+        "is_checked_out": False,
+    },
+}
+
+
+class ProcessCartCheckoutInput(BaseModel):
+    cart_id: str = Field(..., min_length=1)
+    user_id: str = Field(..., min_length=1)
+    discount_code: str | None = Field(default=None)
+
+
+def process_cart_checkout(
+    cart_id: str, user_id: str, discount_code: str | None = None
+) -> str:
+    """Agent Tool: Apply an optional discount code and checkout a user's shopping cart."""
+    try:
+        validated = ProcessCartCheckoutInput(
+            cart_id=cart_id, user_id=user_id, discount_code=discount_code
+        )
+    except Exception as e:
+        return f"Error: Validation failed. {e}"
+
+    with store_lock:
+        if validated.cart_id not in CART_STORE:
+            return f"Error: Cart {validated.cart_id} not found."
+
+        cart = CART_STORE[validated.cart_id]
+
+        if cart["user_id"] != validated.user_id:
+            return f"Error: Access denied. Cart {validated.cart_id} does not belong to user {validated.user_id}."
+
+        if cart["is_checked_out"]:
+            return f"Error: Cart {validated.cart_id} has already been checked out."
+
+        final_total = cart["total"]
+        discount_applied = 0.0
+
+        if validated.discount_code:
+            if validated.user_id.startswith("guest_"):
+                return "Error: Registered account required to apply discounts during checkout."
+
+            if validated.discount_code not in DISCOUNT_STORE:
+                return f"Error: Invalid discount code {validated.discount_code}."
+
+            if DISCOUNT_STORE[validated.discount_code]:
+                return f"Error: Discount code {validated.discount_code} has already been redeemed."
+
+            rate = (
+                0.5
+                if validated.discount_code == "WELCOME50"
+                else 0.2
+                if validated.discount_code == "SUMMER20"
+                else 0.0
+            )
+            discount_applied = cart["total"] * rate
+            final_total -= discount_applied
+            DISCOUNT_STORE[validated.discount_code] = True
+
+        cart["is_checked_out"] = True
+        cart["total"] = final_total
+
+        logger.info(
+            f"Checkout successful for cart {validated.cart_id}. "
+            f"User: {validated.user_id}, Original: {cart['total'] + discount_applied}, "
+            f"Discount Applied: {discount_applied}, Final Total: {final_total}."
+        )
+
+        return (
+            f"Success: Checkout completed for cart {validated.cart_id}. "
+            f"Applied discount: {discount_applied}. Final total: {final_total}."
+        )
+
+
 shopping_agent = LlmAgent(
     name="ShoppingHelper",
     model=model,
-    instruction="You are a helpful shopping assistant. Use your tools to redeem discount codes and award loyalty points for users.",
-    tools=[redeem_discount, award_loyalty_points],
+    instruction="You are a helpful shopping assistant. Use your tools to redeem discount codes, award loyalty points, and process cart checkouts for users.",
+    tools=[redeem_discount, award_loyalty_points, process_cart_checkout],
 )
+
 
 
 root_workflow = Workflow(
