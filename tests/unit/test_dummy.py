@@ -22,6 +22,7 @@ from app.agent import (
     award_loyalty_points,
     CART_STORE,
     process_cart_checkout,
+    update_discount_status,
 )
 
 
@@ -247,3 +248,42 @@ def test_process_cart_checkout_double_discount_fails() -> None:
     assert "Error" in result2
     assert "already been redeemed" in result2
     assert CART_STORE["cart_2"]["is_checked_out"] is False
+
+
+def test_update_discount_status_activate_success() -> None:
+    """Test successfully activating a discount code by an administrator."""
+    DISCOUNT_STORE.clear()
+
+    # Activating an inactive/new code sets its redeemed status to False
+    result = update_discount_status("SPRING10", True, "admin_123")
+    assert "Success" in result
+    assert "SPRING10" in DISCOUNT_STORE
+    assert DISCOUNT_STORE["SPRING10"] is False  # False means active/unredeemed
+
+
+def test_update_discount_status_deactivate_success() -> None:
+    """Test successfully deactivating a discount code by an administrator."""
+    DISCOUNT_STORE["SUMMER20"] = False
+
+    # Deactivating an active code sets its redeemed status to True
+    result = update_discount_status("SUMMER20", False, "admin_456")
+    assert "Success" in result
+    assert DISCOUNT_STORE["SUMMER20"] is True  # True means deactivated/redeemed
+
+
+def test_update_discount_status_non_admin_fails() -> None:
+    """Test that a non-administrator user is blocked from changing discount code status."""
+    result = update_discount_status("SUMMER20", True, "user_123")
+    assert "Error" in result
+    assert "Administrator privileges required" in result
+
+    result2 = update_discount_status("SUMMER20", True, "guest_user")
+    assert "Error" in result2
+    assert "Administrator privileges required" in result2
+
+
+def test_update_discount_status_invalid_format_fails() -> None:
+    """Test that discount codes with invalid format (non-alphanumeric) are rejected."""
+    result = update_discount_status("SPRING_10", True, "admin_123")
+    assert "Error" in result
+    assert "only alphanumeric characters" in result

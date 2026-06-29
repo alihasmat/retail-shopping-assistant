@@ -199,12 +199,64 @@ def process_cart_checkout(
         )
 
 
+class UpdateDiscountStatusInput(BaseModel):
+    code: str = Field(..., min_length=1)
+    active: bool
+    user_id: str = Field(..., min_length=1)
+
+    @field_validator("user_id")
+    @classmethod
+    def validate_admin_user(cls, v: str) -> str:
+        if not v.startswith("admin_"):
+            raise ValueError(
+                "Administrator privileges required to update discount status."
+            )
+        return v
+
+    @field_validator("code")
+    @classmethod
+    def validate_code_format(cls, v: str) -> str:
+        if not v.isalnum():
+            raise ValueError(
+                "Discount code must contain only alphanumeric characters."
+            )
+        return v.upper()
+
+
+def update_discount_status(code: str, active: bool, user_id: str) -> str:
+    """Agent Tool: Activate or deactivate a discount code. Requires administrative privileges."""
+    try:
+        validated = UpdateDiscountStatusInput(
+            code=code, active=active, user_id=user_id
+        )
+    except Exception as e:
+        return f"Error: Validation failed. {e}"
+
+    with store_lock:
+        # True active means "not redeemed yet" in DISCOUNT_STORE
+        # False active means "already redeemed / inactive" in DISCOUNT_STORE
+        DISCOUNT_STORE[validated.code] = not validated.active
+
+        status_str = "activated" if validated.active else "deactivated"
+        logger.info(
+            f"Administrator {validated.user_id} {status_str} discount code {validated.code}."
+        )
+
+        return f"Success: Discount code {validated.code} has been {status_str}."
+
+
 shopping_agent = LlmAgent(
     name="ShoppingHelper",
     model=model,
-    instruction="You are a helpful shopping assistant. Use your tools to redeem discount codes, award loyalty points, and process cart checkouts for users.",
-    tools=[redeem_discount, award_loyalty_points, process_cart_checkout],
+    instruction="You are a helpful shopping assistant. Use your tools to redeem discount codes, award loyalty points, process cart checkouts, and update discount statuses for users.",
+    tools=[
+        redeem_discount,
+        award_loyalty_points,
+        process_cart_checkout,
+        update_discount_status,
+    ],
 )
+
 
 
 
