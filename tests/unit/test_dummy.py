@@ -13,7 +13,14 @@
 # limitations under the License.
 """Unit tests for the shopping assistant agent and discount redemption tool."""
 
-from app.agent import DISCOUNT_STORE, Gemini, redeem_discount
+from app.agent import (
+    DISCOUNT_STORE,
+    Gemini,
+    redeem_discount,
+    LOYALTY_STORE,
+    PROCESSED_TRANSACTIONS,
+    award_loyalty_points,
+)
 
 
 def test_redeem_discount_success() -> None:
@@ -59,7 +66,62 @@ def test_redeem_discount_already_redeemed() -> None:
 def test_custom_gemini_api_key() -> None:
     """Test that the Gemini model is initialized with the simulated API key."""
     model = Gemini(
-        model="gemini-3.1-flash-lite", api_key="AIzaSyD-mock-key-value-12345"
+        model="gemini-3.1-flash-lite", api_key="mock-key-value-12345"
     )
     client = model.api_client
-    assert client._api_client.api_key == "AIzaSyD-mock-key-value-12345"
+    assert client._api_client.api_key == "mock-key-value-12345"
+
+
+def test_award_loyalty_points_success() -> None:
+    """Test successfully awarding loyalty points to a registered user."""
+    LOYALTY_STORE.clear()
+    PROCESSED_TRANSACTIONS.clear()
+
+    result = award_loyalty_points("user_123", 150, "tx_1")
+    assert "Success" in result
+    assert "Awarded 150 points" in result
+    assert LOYALTY_STORE["user_123"] == 150
+    assert "tx_1" in PROCESSED_TRANSACTIONS
+
+
+def test_award_loyalty_points_guest_fails() -> None:
+    """Test that awarding loyalty points to a guest user fails."""
+    LOYALTY_STORE.clear()
+    PROCESSED_TRANSACTIONS.clear()
+
+    result = award_loyalty_points("guest_user", 50, "tx_2")
+    assert "Error" in result
+    assert "Guest accounts are not eligible" in result
+    assert "guest_user" not in LOYALTY_STORE
+
+
+def test_award_loyalty_points_invalid_points() -> None:
+    """Test that invalid point values are rejected."""
+    LOYALTY_STORE.clear()
+    PROCESSED_TRANSACTIONS.clear()
+
+    # Negative points
+    result1 = award_loyalty_points("user_123", -10, "tx_3")
+    assert "Error" in result1
+    assert "Validation failed" in result1
+
+    # Over limit points (> 1000)
+    result2 = award_loyalty_points("user_123", 1005, "tx_4")
+    assert "Error" in result2
+    assert "Validation failed" in result2
+
+
+def test_award_loyalty_points_idempotency() -> None:
+    """Test that duplicate transaction IDs are rejected."""
+    LOYALTY_STORE.clear()
+    PROCESSED_TRANSACTIONS.clear()
+
+    # First attempt succeeds
+    result1 = award_loyalty_points("user_123", 100, "tx_dup")
+    assert "Success" in result1
+
+    # Second attempt with same transaction ID fails
+    result2 = award_loyalty_points("user_123", 100, "tx_dup")
+    assert "Error" in result2
+    assert "already processed" in result2
+    assert LOYALTY_STORE["user_123"] == 100
