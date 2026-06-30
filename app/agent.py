@@ -13,6 +13,10 @@
 # limitations under the License.
 
 from __future__ import annotations
+
+import logging
+import os
+import threading
 from typing import Any
 
 from google.adk.agents.llm_agent import LlmAgent
@@ -20,10 +24,7 @@ from google.adk.apps.app import App
 from google.adk.models.google_llm import Gemini as ADKGemini
 from google.adk.workflow import Workflow
 from google.genai import Client
-import logging
-import threading
 from pydantic import BaseModel, Field, field_validator
-
 
 
 # FIX: Subclass Gemini to support and propagate the api_key parameter in Pydantic v2
@@ -33,17 +34,21 @@ class Gemini(ADKGemini):
     @property
     def api_client(self) -> Client:
         if self.api_key:
-            if not hasattr(self, "_cached_api_client") or self._cached_api_client is None:
+            if (
+                not hasattr(self, "_cached_api_client")
+                or self._cached_api_client is None
+            ):
                 self._cached_api_client = Client(api_key=self.api_key)
             return self._cached_api_client
         return super().api_client
 
 
-
-import os
-
 # Simulated vulnerability: Unsafe hardcoded API key resolved
-model_api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or "mock-key-value-12345"
+model_api_key = (
+    os.environ.get("GOOGLE_API_KEY")
+    or os.environ.get("GEMINI_API_KEY")
+    or "mock-key-value-12345"
+)
 model = Gemini(model="gemini-3.1-flash-lite", api_key=model_api_key)
 
 
@@ -77,8 +82,6 @@ def redeem_discount(code: str, user_id: str) -> str:
 
     DISCOUNT_STORE[validated.code] = True
     return f"Success: Discount code {validated.code} redeemed successfully for user {validated.user_id}."
-
-
 
 
 logger = logging.getLogger(__name__)
@@ -237,18 +240,14 @@ class UpdateDiscountStatusInput(BaseModel):
     @classmethod
     def validate_code_format(cls, v: str) -> str:
         if not v.isalnum():
-            raise ValueError(
-                "Discount code must contain only alphanumeric characters."
-            )
+            raise ValueError("Discount code must contain only alphanumeric characters.")
         return v.upper()
 
 
 def update_discount_status(code: str, active: bool, user_id: str) -> str:
     """Agent Tool: Activate or deactivate a discount code. Requires administrative privileges."""
     try:
-        validated = UpdateDiscountStatusInput(
-            code=code, active=active, user_id=user_id
-        )
+        validated = UpdateDiscountStatusInput(code=code, active=active, user_id=user_id)
     except Exception as e:
         return f"Error: Validation failed. {e}"
 
@@ -276,8 +275,6 @@ shopping_agent = LlmAgent(
         update_discount_status,
     ],
 )
-
-
 
 
 root_workflow = Workflow(

@@ -1,5 +1,6 @@
 import pytest
-from app.agent import redeem_discount, DISCOUNT_STORE
+
+from app.agent import DISCOUNT_STORE, redeem_discount
 
 
 @pytest.fixture(autouse=True)
