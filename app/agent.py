@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field, field_validator
 
 # FIX: Subclass Gemini to support and propagate the api_key parameter in Pydantic v2
 class Gemini(ADKGemini):
-    api_key: str = None
+    api_key: str | None = None
 
     @property
     def api_client(self) -> Client:
@@ -45,11 +45,9 @@ class Gemini(ADKGemini):
 
 # Simulated vulnerability: Unsafe hardcoded API key resolved
 model_api_key = (
-    os.environ.get("GOOGLE_API_KEY")
-    or os.environ.get("GEMINI_API_KEY")
-    or "mock-key-value-12345"
+    os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or None
 )
-model = Gemini(model="gemini-3.1-flash-lite", api_key=model_api_key)
+model = Gemini(model="gemini-2.5-flash-lite", api_key=model_api_key)
 
 
 # In-memory discount redemption store (simulating database state)

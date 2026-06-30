@@ -16,7 +16,7 @@ graph TD
     FastAPI <-->|App Runner| ADKApp[ADK App <br> app/agent.py]
     ADKApp <-->|Workflow Engine| Workflows[Root Workflow <br> shopping_assistant_workflow]
     Workflows <-->|Execute Agent| LlmAgent[LlmAgent <br> ShoppingHelper]
-    LlmAgent <-->|Generate Plan & Calls| LLM[Gemini Model <br> gemini-3.1-flash-lite]
+    LlmAgent <-->|Generate Plan & Calls| LLM[Gemini Model <br> gemini-2.5-flash-lite]
 
     LlmAgent -->|Execute Tool| Tools[Agent Tools]
 

@@ -68,7 +68,7 @@ def test_redeem_discount_already_redeemed() -> None:
 
 def test_custom_gemini_api_key() -> None:
     """Test that the Gemini model is initialized with the simulated API key."""
-    model = Gemini(model="gemini-3.1-flash-lite", api_key="mock-key-value-12345")
+    model = Gemini(model="gemini-2.5-flash-lite", api_key="mock-key-value-12345")
     client = model.api_client
     assert client._api_client.api_key == "mock-key-value-12345"
 
